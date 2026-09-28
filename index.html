@@ -152,7 +152,7 @@
     </table>
   </div>
 
-  <p id="hint">Tap a round cell to enter points (0&ndash;10) &mdash; Enter moves to the next one. Tap a team name to rename it, or a column header to sort.</p>
+  <p id="hint">Tap a round cell to enter points (0&ndash;10, halves allowed) &mdash; Enter moves to the next one. Tap a team name to rename it, or a column header to sort.</p>
 </main>
 
 <script>
@@ -233,8 +233,8 @@
     tbody.innerHTML = list.map(function (t) {
       var cells = t.scores.map(function (s, i) {
         if (editing && editing.id === t.id && editing.field === i) {
-          return '<td class="score"><input type="number" min="0" max="10" step="1" ' +
-                 'inputmode="numeric" enterkeyhint="next" value="' + (s == null ? '' : s) + '"></td>';
+          return '<td class="score"><input type="number" min="0" max="10" step="0.5" ' +
+                 'inputmode="decimal" enterkeyhint="next" value="' + (s == null ? '' : s) + '"></td>';
         }
         return '<td class="score' + (s == null ? ' empty-score' : '') + '" tabindex="0" ' +
                'data-field="' + i + '">' + (s == null ? '&ndash;' : s) + '</td>';
@@ -295,7 +295,7 @@
         var n = Number(raw);
         team.scores[target.field] = (raw === '' || !isFinite(n))
           ? null
-          : Math.max(0, Math.min(10, Math.round(n)));
+          : Math.max(0, Math.min(10, Math.round(n * 2) / 2));  // nearest half point
       }
       save();
     }
