@@ -76,6 +76,15 @@ fi
 git branch -M "$BRANCH"
 SHA="$(git rev-parse HEAD)"
 
+# An existing remote wins over the folder name: the repo may well be called
+# something else than the directory it lives in.
+if git remote get-url origin >/dev/null 2>&1; then
+  SLUG="$(git remote get-url origin | sed -E 's#^.*github\.com[:/]##; s#\.git$##')"
+  OWNER="${SLUG%%/*}"
+  REPO_NAME="${SLUG##*/}"
+  say "Using existing remote: $SLUG"
+fi
+
 # --------------------------------------------------------------- GitHub repo
 if git remote get-url origin >/dev/null 2>&1; then
   :
@@ -121,6 +130,7 @@ say "Waiting for the workflow run"
 RUN_ID=""
 for _ in $(seq 1 30); do
   RUN_ID="$(gh run list --workflow "$WORKFLOW" --branch "$BRANCH" --limit 20 \
+    --repo "$SLUG" \
     --json databaseId,headSha --jq "map(select(.headSha == \"$SHA\")) | .[0].databaseId // empty" 2>/dev/null || true)"
   [ -n "$RUN_ID" ] && break
   sleep 3
@@ -133,7 +143,7 @@ if [ -z "$RUN_ID" ]; then
   exit 0
 fi
 
-if gh run watch "$RUN_ID" --exit-status; then
+if gh run watch "$RUN_ID" --repo "$SLUG" --exit-status; then
   URL="$(URL_OF)"
   [ -n "$URL" ] || URL="https://$OWNER.github.io/$REPO_NAME/"
   echo
