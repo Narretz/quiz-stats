@@ -158,7 +158,15 @@
     border: 1px solid var(--line); border-radius: 8px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, .32);
   }
-  .modal h2 { margin: 0 0 14px; font-size: 17px; }
+  .modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  /* The title takes the room that is left and cuts the name, rather than
+     pushing Delete off the edge. min-width:0 is what lets a flex item shrink
+     below its content. */
+  .modal h2 {
+    margin: 0; font-size: 17px; flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #edit-delete { flex: none; }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field > span {
     font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
@@ -173,8 +181,7 @@
     gap: 10px; margin-top: 12px;
   }
   #edit-rounds .field input { text-align: center; padding: 8px 4px; }
-  .modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
-  .modal-actions .spacer { flex: 1 1 auto; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
   .danger { color: var(--danger); }
   .danger:hover { border-color: var(--danger); }
   .primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -240,7 +247,10 @@
 
 <div id="modal-backdrop" class="backdrop" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <h2 id="modal-title">Edit team</h2>
+    <div class="modal-head">
+      <h2 id="modal-title">Edit team</h2>
+      <button type="button" id="edit-delete" class="danger">Delete team</button>
+    </div>
     <!-- novalidate: out-of-range values are clamped by parseScore, the same way
          the inline editor treats them, instead of blocking the save. -->
     <form id="edit-form" novalidate>
@@ -249,8 +259,6 @@
       </label>
       <div id="edit-rounds"></div>
       <div class="modal-actions">
-        <button type="button" id="edit-delete" class="danger">Delete team</button>
-        <span class="spacer"></span>
         <button type="submit" id="edit-done" class="primary">Done</button>
       </div>
     </form>
@@ -564,6 +572,13 @@
     }
   })();
 
+  // The name is quoted, and the full one stays reachable on hover when the
+  // title has to cut it.
+  function setModalTitle(name) {
+    modalTitle.textContent = 'Edit "' + name + '"';
+    modalTitle.title = name;
+  }
+
   // What the field should be showing, straight from the team.
   function storedValue(index) {
     var team = byId(modalTeamId);
@@ -588,7 +603,7 @@
     if (index === 'name') {
       var name = input.value.trim();
       if (name) team.name = name;
-      modalTitle.textContent = 'Edit ' + team.name;
+      setModalTitle(team.name);
     } else {
       team.scores[index] = parseScore(input.value);
     }
@@ -625,7 +640,7 @@
     modalTeamId = id;
     modalSnapshot = { name: team.name, scores: team.scores.slice() };
     returnFocusTo = document.activeElement;
-    modalTitle.textContent = 'Edit ' + team.name;
+    setModalTitle(team.name);
     nameField.value = team.name;
     roundFields.forEach(function (input, i) {
       input.value = team.scores[i] == null ? '' : team.scores[i];
