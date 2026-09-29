@@ -272,14 +272,7 @@
       input.focus();
       input.select();
       input.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      // Deferred: a click on another cell fires after this blur, so the table
-      // must still be intact when it lands. The guard makes this a no-op when
-      // that click already re-rendered and opened a different editor.
-      input.onblur = function () {
-        setTimeout(function () {
-          if (activeInput === input) commit(input.value);
-        }, 0);
-      };
+      input.onblur = function () { commit(input.value); };
       input.onkeydown = function (e) {
         if (e.key === 'Enter') { e.preventDefault(); commit(input.value, 1); }
         else if (e.key === 'Escape') { e.preventDefault(); editing = null; render(); }
@@ -321,6 +314,7 @@
 
   // Moving straight from one editor to another, in a single click.
   function openEditor(id, field) {
+    if (editing && editing.id === id && editing.field === field) return;
     flushOpenEditor();
     editing = { id: id, field: field };
     render();
@@ -356,6 +350,23 @@
     field.focus();
     save();
     render();
+  });
+
+  tbody.addEventListener('mousedown', function (e) {
+    var row = e.target.closest('tr[data-id]');
+    if (!row) return;
+    var cell = e.target.closest('td[data-field]');
+    if (!cell && !e.target.closest('td.del')) return;
+
+    // Stop the press from moving focus. Otherwise the open editor blurs, the
+    // table re-renders, and the element being pressed is gone before mouseup -
+    // so no click is ever dispatched and the press appears to do nothing.
+    e.preventDefault();
+
+    if (cell) {
+      var field = cell.dataset.field;
+      openEditor(row.dataset.id, field === 'name' ? 'name' : +field);
+    }
   });
 
   tbody.addEventListener('click', function (e) {
