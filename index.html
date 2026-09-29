@@ -77,7 +77,15 @@
      all this size. The primary controls (Add team, Close) keep 44px. */
   .btn-sm { padding: 6px 12px; min-height: 36px; font-size: 13px; }
 
-  .toolbar { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  /* Actions split across a row: the safe ones on the left, the destructive
+     one pushed to the right. Used by the toolbar and by each quiz row. */
+  /* An auto margin rather than space-between: when the row wraps, the
+     destructive button stays on the right of its own line too. */
+  .actions-split { display: flex; gap: 8px; flex-wrap: wrap; }
+  .actions-split > :last-child { margin-left: auto; }
+  .actions-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .toolbar { margin-top: 12px; }
 
   .quiz-list { display: flex; flex-direction: column; gap: 10px; }
   .quiz-row {
@@ -90,9 +98,7 @@
     border: 1px solid var(--line); border-radius: 4px;
     background: var(--bg); color: var(--ink);
   }
-  .quiz-row-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .quiz-row-meta { flex: 1 1 auto; font-size: 12px; color: var(--muted); }
-  .quiz-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .quiz-row-meta { font-size: 12px; color: var(--muted); }
   #quizzes-new { flex: none; }
 
   .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -285,8 +291,12 @@
 
   <p id="hint">Tap a round cell to enter points. Enter moves to the next one.</p>
 
-  <div class="toolbar">
-    <button type="button" id="copy-csv" class="btn-sm">Copy as CSV</button>
+  <div class="toolbar actions-split">
+    <span class="actions-group">
+      <button type="button" id="copy-csv" class="btn-sm">Copy as CSV</button>
+      <button type="button" id="reuse-quiz" class="btn-sm">Reuse teams in new quiz</button>
+    </span>
+    <button type="button" id="delete-quiz" class="btn-sm danger">Delete quiz</button>
   </div>
 </main>
 
@@ -800,14 +810,14 @@
       var showing = q.id === store.currentId;
       return '<div class="quiz-row' + (showing ? ' is-current' : '') + '" data-quiz="' + q.id + '">' +
         '<input class="quiz-row-name" type="text" maxlength="60" aria-label="Quiz name" value="' + esc(q.name) + '">' +
-        '<div class="quiz-row-foot">' +
-          '<span class="quiz-row-meta">' + teamCount(q) + ' &middot; ' + esc(formatDate(q.created)) +
-            (showing ? ' &middot; active' : '') + '</span>' +
-          '<span class="quiz-row-actions">' +
+        '<span class="quiz-row-meta">' + teamCount(q) + ' &middot; ' + esc(formatDate(q.created)) +
+          (showing ? ' &middot; active' : '') + '</span>' +
+        '<div class="actions-split">' +
+          '<span class="actions-group">' +
             (showing ? '' : '<button type="button" class="btn-sm" data-act="open">Open</button>') +
             '<button type="button" class="btn-sm" data-act="reuse">Reuse teams in new quiz</button>' +
-            '<button type="button" class="btn-sm danger" data-act="delete">Delete</button>' +
           '</span>' +
+          '<button type="button" class="btn-sm danger" data-act="delete">Delete</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -918,6 +928,12 @@
   document.getElementById('new-quiz').addEventListener('click', startNewQuiz);
   document.getElementById('quizzes-new').addEventListener('click', startNewQuiz);
   document.getElementById('show-quizzes').addEventListener('click', openQuizzes);
+  document.getElementById('reuse-quiz').addEventListener('click', function () {
+    reuseTeamsFrom(store.currentId);
+  });
+  document.getElementById('delete-quiz').addEventListener('click', function () {
+    deleteQuiz(store.currentId);
+  });
   document.getElementById('quizzes-close').addEventListener('click', function () { closeQuizzes(); });
   quizzesBackdrop.addEventListener('click', function (e) {
     if (e.target === quizzesBackdrop) closeQuizzes();

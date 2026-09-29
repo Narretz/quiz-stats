@@ -137,4 +137,25 @@ module.exports = async function ({ browser, ok }) {
   ok(await page.isHidden('#quizzes-backdrop'), 'Escape closes the list');
   ok(page.errors.length === 0, 'no page errors: ' + page.errors.join(' | '));
   await page.context().close();
+
+  // --- the same two actions from the toolbar, on the quiz that is on screen ---
+  page = await openBoard(browser, { teams: TEAMS });
+  answer(page, 'From toolbar');
+  await page.click('#reuse-quiz');
+  quizzes = await storedQuizzes(page);
+  ok(quizzes.names.length === 2 && quizzes.current === 'From toolbar', 'the toolbar reuses the current quiz teams');
+  ok((await stored(page)).join(' | ') === 'Alpha:[null,null,null,null,null] | Bravo:[null,null,null,null,null]',
+     'carried over with the scores cleared');
+  await clearNotes(page);
+
+  answer(page, true);
+  await page.click('#delete-quiz');
+  ok((await storedQuizzes(page)).names.length === 1, 'the toolbar deletes the quiz on screen');
+  ok((await notes(page))[0].indexOf('From toolbar') > 0, 'naming what went: ' + (await notes(page))[0]);
+  ok((await stored(page))[0] === 'Alpha:[7,8,9,10,6]', 'and the board falls back to the remaining quiz');
+  await page.click('.note-action');
+  ok((await storedQuizzes(page)).names.length === 2, 'and that is undoable too');
+
+  ok(page.errors.length === 0, 'no page errors: ' + page.errors.join(' | '));
+  await page.context().close();
 };
