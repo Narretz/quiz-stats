@@ -162,6 +162,7 @@
   /* The title takes the room that is left and cuts the name, rather than
      pushing Delete off the edge. min-width:0 is what lets a flex item shrink
      below its content. */
+  .modal:focus { outline: none; }
   .modal h2 {
     margin: 0; font-size: 17px; flex: 1 1 auto; min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -246,7 +247,7 @@
 <div id="notifications" class="notifications" role="status" aria-live="polite"></div>
 
 <div id="modal-backdrop" class="backdrop" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
     <div class="modal-head">
       <h2 id="modal-title">Edit team</h2>
       <button type="button" id="edit-delete" class="danger">Delete team</button>
@@ -279,6 +280,7 @@
   var tbody = document.querySelector('#board tbody');
   var notifications = document.getElementById('notifications');
   var backdrop = document.getElementById('modal-backdrop');
+  var modalBox = backdrop.querySelector('.modal');
   var modalTitle = document.getElementById('modal-title');
   var nameField = document.getElementById('edit-name');
   var modalTeamId = null;
@@ -378,7 +380,7 @@
             '</span>' +
             '</span>' +
         '</td>' +
-        '<td class="edit"><button type="button" aria-label="Edit ' + esc(t.name) + '">Edit</button></td>' +
+        '<td class="edit"><button type="button" aria-label="Edit ' + esc(t.name) + '">✎</button></td>' +
       '</tr>';
     }).join('');
 
@@ -647,8 +649,10 @@
     });
 
     backdrop.hidden = false;
-    nameField.focus();
-    nameField.select();
+    // Focus the dialog, not a field: putting a caret in the name would open
+    // the keyboard on a phone and select a name nobody asked to change. The
+    // dialog still needs focus for Escape and the tab trap to reach it.
+    modalBox.focus();
   }
 
   // silent skips the undo notification, for the delete path which posts
@@ -701,6 +705,9 @@
   });
   document.getElementById('edit-delete').addEventListener('click', function () {
     var id = modalTeamId;
+    var team = byId(id);
+    if (!team) return;
+    if (!confirm('Remove "' + team.name + '"?')) return;
     closeModal(true);
     deleteTeam(id);
   });
