@@ -66,14 +66,17 @@
   th[aria-sort="descending"]::after { content: " \25BC"; }
 
   td.seq { color: var(--muted); width: 1%; font-variant-numeric: tabular-nums; }
-  td.place { width: 1%; font-weight: 600; }
-  tr.first td.place, tr.first td.name { font-weight: 700; color: var(--ink); }
+  /* Total and rank are one line: without this the column wraps to two rows. */
+  td.total { width: 1%; white-space: nowrap; }
+  .rank { margin-left: 2px; font-size: 11px; font-weight: 500; color: var(--muted); }
+  tr.first td.total, tr.first td.name { font-weight: 700; color: var(--ink); }
+  tr.first .rank { color: var(--ink); }
   td.name { cursor: text; }
   td.score { cursor: pointer; width: 54px; }
   td.score:hover, td.name:hover { background: var(--hover); }
   td.score:focus-visible, td.name:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   td.empty-score { color: var(--muted); }
-  td.total { font-weight: 600; }
+  td.total > :first-child, td.total { font-weight: 600; }
   td.del { width: 1%; padding: 0 4px 0 0; }
   td.del button {
     width: 36px; min-height: 36px; padding: 0; border-color: transparent;
@@ -116,6 +119,7 @@
     .rp, .pl-full { display: none; }
     .pl-short { display: inline; }
     td input { text-align: center; padding: 2px 0; }
+    .rank { margin-left: 0; font-size: 10px; }
     /* Keep the whole table inside a 360px screen: no sideways scroll. */
     td.del { padding: 0; }
     td.del button { width: 30px; min-height: 32px; font-size: 16px; }
@@ -142,8 +146,7 @@
           <th data-sort="r2"><span class="rp">R</span>3</th>
           <th data-sort="r3"><span class="rp">R</span>4</th>
           <th data-sort="r4"><span class="rp">R</span>5</th>
-          <th data-sort="total"><span class="pl-full">Total</span><span class="pl-short">Tot</span></th>
-          <th data-sort="place" title="Sort by place"><span class="pl-full">Place</span><span class="pl-short">Pl</span></th>
+          <th data-sort="total" title="Sort by total, which is also the order of places"><span class="pl-full">Total</span><span class="pl-short">Tot</span></th>
           <th></th>
         </tr>
       </thead>
@@ -160,7 +163,8 @@
   var ROUNDS = 5;
 
   var teams = load();
-  var sort = { key: 'place', dir: 1 };
+  // Highest total first, which is the same thing as first place first.
+  var sort = { key: 'total', dir: -1 };
   var editing = null;      // { id: teamId, field: 'name' | roundIndex }
   var activeInput = null;
 
@@ -190,6 +194,12 @@
     try { localStorage.setItem(KEY, JSON.stringify(teams)); } catch (e) {}
   }
 
+  function ordinal(n) {
+    var suffix = ['th', 'st', 'nd', 'rd'];
+    var v = n % 100;
+    return n + (suffix[(v - 20) % 10] || suffix[v] || suffix[0]);
+  }
+
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -213,7 +223,6 @@
       var v;
       if (key === 'seq') v = a.seq - b.seq;
       else if (key === 'name') v = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-      else if (key === 'place') v = a.place - b.place;
       else if (key === 'total') v = a.total - b.total;
       else {
         var i = +key.slice(1);
@@ -246,14 +255,14 @@
       return '<tr data-id="' + t.id + '"' + (t.place === 1 ? ' class="first"' : '') + '>' +
         '<td class="seq">' + t.seq + '</td>' +
         name + cells +
-        '<td class="total">' + t.total + '</td>' +
-        '<td class="place">' + t.place + '</td>' +
+        '<td class="total">' + t.total +
+          ' <span class="rank">' + ordinal(t.place) + '</span></td>' +
         '<td class="del"><button type="button" title="Remove team" aria-label="Remove ' + esc(t.name) + '">&times;</button></td>' +
       '</tr>';
     }).join('');
 
     if (!teams.length) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:left;color:var(--muted)">' +
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:left;color:var(--muted)">' +
                         'No teams yet &mdash; add one above.</td></tr>';
     }
 
@@ -406,7 +415,7 @@
       flushOpenEditor();
       var key = th.dataset.sort;
       if (sort.key === key) sort.dir *= -1;
-      else sort = { key: key, dir: (key === 'place' || key === 'name' || key === 'seq') ? 1 : -1 };
+      else sort = { key: key, dir: (key === 'name' || key === 'seq') ? 1 : -1 };
       render();
     });
   });
