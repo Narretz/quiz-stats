@@ -11,7 +11,7 @@
 
 const { launch } = require('./helpers');
 
-const SUITES = ['flow', 'editing', 'half-points', 'dialog', 'csv'];
+const SUITES = ['flow', 'editing', 'half-points', 'dialog', 'csv', 'quizzes'];
 
 (async () => {
   const wanted = process.argv.slice(2);

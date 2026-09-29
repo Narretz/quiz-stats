@@ -44,7 +44,11 @@
     -webkit-text-size-adjust: 100%;
   }
   main { max-width: 860px; margin: 0 auto; }
-  h1 { font-size: 20px; margin: 0 0 16px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .quiz-label {
+    margin: 0 0 16px; font-weight: 600; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
 
   /* Scoped: a bare `form` rule also caught the dialog's form and laid its
      sections out in a row. */
@@ -64,8 +68,25 @@
   }
   button:hover { border-color: var(--muted); }
 
-  .toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .toolbar { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .toolbar button { padding: 6px 12px; min-height: 36px; font-size: 13px; }
+
+  .quiz-list { display: flex; flex-direction: column; gap: 10px; }
+  .quiz-row {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 10px; border: 1px solid var(--line); border-radius: 6px;
+  }
+  .quiz-row.is-current { border-color: var(--accent); }
+  .quiz-row-name {
+    width: 100%; padding: 6px 8px; min-height: 40px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 4px;
+    background: var(--bg); color: var(--ink);
+  }
+  .quiz-row-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .quiz-row-meta { flex: 1 1 auto; font-size: 12px; color: var(--muted); }
+  .quiz-row-actions { display: flex; gap: 6px; }
+  .quiz-row-actions button { padding: 4px 8px; min-height: 32px; font-size: 12px; }
+  #quizzes-new { flex: none; padding: 6px 12px; min-height: 36px; font-size: 13px; }
 
   .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
@@ -122,8 +143,10 @@
   #hint { color: var(--muted); font-size: 13px; margin-top: 14px; }
 
   /* Notifications ---------------------------------------------------------- */
+  /* Above the dialog backdrops (30): a quiz is deleted from inside the list,
+     which stays open, so its Undo has to stay clickable. */
   .notifications {
-    position: fixed; z-index: 20;
+    position: fixed; z-index: 40;
     left: 50%; transform: translateX(-50%); bottom: 16px;
     width: min(440px, calc(100vw - 24px));
     display: flex; flex-direction: column; gap: 8px;
@@ -219,6 +242,7 @@
 <body>
 <main>
   <h1>Quiz Scoreboard</h1>
+  <p id="quiz-label" class="quiz-label"></p>
 
   <form id="add-form">
     <input id="team-name" placeholder="Team name" autocomplete="off" maxlength="40">
@@ -247,11 +271,26 @@
   <p id="hint">Tap a round cell to enter points. Enter moves to the next one.</p>
 
   <div class="toolbar">
+    <button type="button" id="new-quiz">New quiz</button>
+    <button type="button" id="show-quizzes">Quizzes</button>
     <button type="button" id="copy-csv">Copy as CSV</button>
   </div>
 </main>
 
 <div id="notifications" class="notifications" role="status" aria-live="polite"></div>
+
+<div id="quizzes-backdrop" class="backdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="quizzes-title" tabindex="-1">
+    <div class="modal-head">
+      <h2 id="quizzes-title">Stored quizzes</h2>
+      <button type="button" id="quizzes-new">New quiz</button>
+    </div>
+    <div id="quiz-list" class="quiz-list"></div>
+    <div class="modal-actions">
+      <button type="button" id="quizzes-close" class="primary">Close</button>
+    </div>
+  </div>
+</div>
 
 <div id="modal-backdrop" class="backdrop" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
@@ -278,7 +317,8 @@
   var KEY = 'quiz-scoreboard';
   var ROUNDS = 5;
 
-  var teams = load();
+  var store = load();                  // { version, quizzes: [...], currentId }
+  var teams = currentQuiz().teams;     // the board on screen
   // Highest total first, which is the same thing as first place first.
   var sort = { key: 'total', dir: -1 };
   var editing = null;      // { id: teamId, field: 'name' | roundIndex }
@@ -294,19 +334,119 @@
   var modalSnapshot = null;
   var returnFocusTo = null;
 
+  var quizLabel = document.getElementById('quiz-label');
+  var quizzesBackdrop = document.getElementById('quizzes-backdrop');
+  var quizzesBox = quizzesBackdrop.querySelector('.modal');
+  var quizList = document.getElementById('quiz-list');
+  var quizzesReturnFocusTo = null;
+
+  function makeId() {
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+  }
+
+  function formatDate(ms) {
+    var when = new Date(ms);
+    try {
+      return when.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch (e) {
+      return when.toISOString().slice(0, 10);
+    }
+  }
+
+  function defaultQuizName() {
+    return 'Quiz ' + formatDate(Date.now());
+  }
+
+  function normaliseTeam(t, i) {
+    var scores = Array.isArray(t.scores) ? t.scores.slice(0, ROUNDS) : [];
+    while (scores.length < ROUNDS) scores.push(null);
+    // Boards saved before the # column existed get numbered by stored order.
+    return {
+      id: t.id || makeId(),
+      seq: isFinite(t.seq) ? t.seq : i + 1,
+      name: String(t.name),
+      scores: scores,
+    };
+  }
+
+  function makeQuiz(name, teamList) {
+    return { id: makeId(), name: name, created: Date.now(), teams: teamList || [] };
+  }
+
+  function freshStore() {
+    var quiz = makeQuiz(defaultQuizName());
+    return { version: 2, quizzes: [quiz], currentId: quiz.id };
+  }
+
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
-      if (!raw) return [];
-      return JSON.parse(raw).map(function (t, i) {
-        var scores = Array.isArray(t.scores) ? t.scores.slice(0, ROUNDS) : [];
-        while (scores.length < ROUNDS) scores.push(null);
-        // Boards saved before the # column existed get numbered by stored order.
-        return { id: t.id, seq: isFinite(t.seq) ? t.seq : i + 1, name: String(t.name), scores: scores };
-      });
+      if (raw) {
+        var parsed = JSON.parse(raw);
+
+        // Version 1 stored a bare array of teams. That board becomes the
+        // first quiz rather than being thrown away.
+        if (Array.isArray(parsed)) {
+          var carried = makeQuiz(defaultQuizName(), parsed.map(normaliseTeam));
+          return { version: 2, quizzes: [carried], currentId: carried.id };
+        }
+
+        if (parsed && Array.isArray(parsed.quizzes) && parsed.quizzes.length) {
+          var quizzes = parsed.quizzes.map(function (q) {
+            return {
+              id: q.id || makeId(),
+              name: String(q.name || defaultQuizName()),
+              created: isFinite(q.created) ? q.created : Date.now(),
+              teams: (Array.isArray(q.teams) ? q.teams : []).map(normaliseTeam),
+            };
+          });
+          var known = quizzes.some(function (q) { return q.id === parsed.currentId; });
+          return { version: 2, quizzes: quizzes, currentId: known ? parsed.currentId : quizzes[0].id };
+        }
+      }
     } catch (e) {
-      return [];
+      // unreadable storage falls through to a fresh board
     }
+    return freshStore();
+  }
+
+  function quizById(id) {
+    return store.quizzes.filter(function (q) { return q.id === id; })[0];
+  }
+
+  function currentQuiz() {
+    var found = quizById(store.currentId);
+    if (!found) {
+      if (!store.quizzes.length) store.quizzes.push(makeQuiz(defaultQuizName()));
+      found = store.quizzes[0];
+      store.currentId = found.id;
+    }
+    return found;
+  }
+
+  // Everything that swaps the board goes through here, so `teams` never ends
+  // up pointing at a quiz that is no longer on screen.
+  function showQuiz(id) {
+    store.currentId = id;
+    teams = currentQuiz().teams;
+    editing = null;
+    save();
+    render();
+  }
+
+  function addQuiz(name, teamList) {
+    var quiz = makeQuiz(name, teamList || []);
+    store.quizzes.push(quiz);
+    showQuiz(quiz.id);
+    renderQuizList();
+    return quiz;
+  }
+
+  // Same teams, clean sheet, renumbered from one.
+  function teamsCarriedFrom(quiz) {
+    return quiz.teams.map(function (t, i) {
+      return { id: makeId(), seq: i + 1, name: t.name, scores: new Array(ROUNDS).fill(null) };
+    });
   }
 
   // Never reused, so a team keeps its number when an earlier team is removed.
@@ -315,7 +455,7 @@
   }
 
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(teams)); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {}
   }
 
   function ordinalSuffix(n) {
@@ -403,6 +543,8 @@
         th.removeAttribute('aria-sort');
       }
     });
+
+    updateQuizLabel();
 
     var input = tbody.querySelector('input');
     if (input) {
@@ -578,12 +720,13 @@
 
   // Removal is undoable, so it asks no question first.
   function deleteTeam(id) {
+    var list = teams;                  // captured: the board may be swapped before Undo
     var index = -1;
-    teams.forEach(function (t, i) { if (t.id === id) index = i; });
+    list.forEach(function (t, i) { if (t.id === id) index = i; });
     if (index < 0) return;
 
-    var removed = teams[index];
-    teams.splice(index, 1);
+    var removed = list[index];
+    list.splice(index, 1);
     editing = null;
     save();
     render();
@@ -593,7 +736,7 @@
       action: {
         label: 'Undo',
         onClick: function () {
-          teams.splice(Math.min(index, teams.length), 0, removed);
+          list.splice(Math.min(index, list.length), 0, removed);
           save();
           render();
         }
@@ -624,6 +767,173 @@
 
     return { id: order[row].id, field: next };
   }
+
+  // Quizzes -----------------------------------------------------------------
+  function updateQuizLabel() {
+    var quiz = currentQuiz();
+    quizLabel.textContent = quiz.name;
+    quizLabel.title = quiz.name;
+  }
+
+  function teamCount(quiz) {
+    return quiz.teams.length + (quiz.teams.length === 1 ? ' team' : ' teams');
+  }
+
+  function renderQuizList() {
+    updateQuizLabel();
+
+    var newestFirst = store.quizzes.slice().sort(function (a, b) { return b.created - a.created; });
+    quizList.innerHTML = newestFirst.map(function (q) {
+      var showing = q.id === store.currentId;
+      return '<div class="quiz-row' + (showing ? ' is-current' : '') + '" data-quiz="' + q.id + '">' +
+        '<input class="quiz-row-name" type="text" maxlength="60" aria-label="Quiz name" value="' + esc(q.name) + '">' +
+        '<div class="quiz-row-foot">' +
+          '<span class="quiz-row-meta">' + teamCount(q) + ' &middot; ' + esc(formatDate(q.created)) +
+            (showing ? ' &middot; showing now' : '') + '</span>' +
+          '<span class="quiz-row-actions">' +
+            (showing ? '' : '<button type="button" data-act="open">Open</button>') +
+            '<button type="button" data-act="reuse">Reuse teams</button>' +
+            '<button type="button" data-act="delete" class="danger">Delete</button>' +
+          '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function openQuizzes() {
+    flushOpenEditor();
+    if (editing) { editing = null; render(); }
+    renderQuizList();
+    quizzesReturnFocusTo = document.activeElement;
+    quizzesBackdrop.hidden = false;
+    quizzesBox.focus();
+  }
+
+  function closeQuizzes() {
+    quizzesBackdrop.hidden = true;
+    if (quizzesReturnFocusTo && document.contains(quizzesReturnFocusTo)) quizzesReturnFocusTo.focus();
+    quizzesReturnFocusTo = null;
+  }
+
+  function askForName(message) {
+    var suggested = defaultQuizName();
+    var answer = prompt(message, suggested);
+    if (answer === null) return null;              // cancelled
+    return answer.trim() || suggested;
+  }
+
+  function startNewQuiz() {
+    var name = askForName('Name for the new quiz');
+    if (name === null) return;
+    addQuiz(name, []);
+    closeQuizzes();
+    notify('Started "' + name + '". The previous quiz is kept under Quizzes.');
+  }
+
+  function reuseTeamsFrom(id) {
+    var source = quizById(id);
+    if (!source) return;
+    if (!source.teams.length) {
+      notify('"' + source.name + '" has no teams to carry over.', { tone: 'warn' });
+      return;
+    }
+
+    var name = askForName('Name for the new quiz');
+    if (name === null) return;
+
+    addQuiz(name, teamsCarriedFrom(source));
+    closeQuizzes();
+    notify('Started "' + name + '" with ' + teamCount(source) + ' from "' + source.name + '", scores cleared.');
+  }
+
+  function renameQuiz(id, value) {
+    var quiz = quizById(id);
+    if (!quiz) return;
+    var name = value.trim();
+    if (name) quiz.name = name;
+    save();
+    updateQuizLabel();
+    return quiz.name;
+  }
+
+  function deleteQuiz(id) {
+    var index = -1;
+    store.quizzes.forEach(function (q, i) { if (q.id === id) index = i; });
+    if (index < 0) return;
+
+    var removed = store.quizzes[index];
+    if (!confirm('Delete "' + removed.name + '" and its scores?')) return;
+
+    var wasShowing = store.currentId === id;
+    store.quizzes.splice(index, 1);
+
+    // The board always shows something, so removing the last quiz leaves an
+    // empty one behind - which Undo has to clear up again.
+    var filler = null;
+    if (!store.quizzes.length) {
+      filler = makeQuiz(defaultQuizName());
+      store.quizzes.push(filler);
+    }
+    if (wasShowing) store.currentId = store.quizzes[Math.min(index, store.quizzes.length - 1)].id;
+
+    teams = currentQuiz().teams;
+    editing = null;
+    save();
+    render();
+    renderQuizList();
+
+    notify('Deleted "' + removed.name + '".', {
+      timeout: 12000,
+      action: {
+        label: 'Undo',
+        onClick: function () {
+          if (filler && !filler.teams.length) {
+            var at = store.quizzes.indexOf(filler);
+            if (at >= 0) store.quizzes.splice(at, 1);
+          }
+          store.quizzes.splice(Math.min(index, store.quizzes.length), 0, removed);
+          if (wasShowing) store.currentId = removed.id;
+          teams = currentQuiz().teams;
+          save();
+          render();
+          renderQuizList();
+        }
+      }
+    });
+  }
+
+  document.getElementById('new-quiz').addEventListener('click', startNewQuiz);
+  document.getElementById('quizzes-new').addEventListener('click', startNewQuiz);
+  document.getElementById('show-quizzes').addEventListener('click', openQuizzes);
+  document.getElementById('quizzes-close').addEventListener('click', function () { closeQuizzes(); });
+  quizzesBackdrop.addEventListener('click', function (e) {
+    if (e.target === quizzesBackdrop) closeQuizzes();
+  });
+
+  quizList.addEventListener('click', function (e) {
+    var button = e.target.closest('button[data-act]');
+    if (!button) return;
+    var id = button.closest('[data-quiz]').dataset.quiz;
+
+    if (button.dataset.act === 'open') {
+      showQuiz(id);
+      renderQuizList();
+      closeQuizzes();
+    } else if (button.dataset.act === 'reuse') {
+      reuseTeamsFrom(id);
+    } else {
+      deleteQuiz(id);
+    }
+  });
+
+  // Renaming writes through on blur. The list is deliberately NOT rebuilt
+  // here: focusout runs before the click that caused it, and replacing the
+  // rows would destroy the button being pressed.
+  quizList.addEventListener('focusout', function (e) {
+    if (!e.target.classList.contains('quiz-row-name')) return;
+    var id = e.target.closest('[data-quiz]').dataset.quiz;
+    e.target.value = renameQuiz(id, e.target.value);
+  });
 
   // Edit dialog -------------------------------------------------------------
   var roundFields = [];
@@ -799,9 +1109,20 @@
     if (e.target === backdrop) closeModal();   // not closeModal(event)
   });
 
-  backdrop.addEventListener('keydown', function (e) {
+  // Escape and Tab are handled for whichever dialog is open, on the document
+  // rather than on the backdrop: pressing a notification's button moves focus
+  // out of the dialog, and a listener bound to the backdrop stops hearing
+  // anything at that point.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' && e.key !== 'Tab') return;
+
+    var openBackdrop = !backdrop.hidden ? backdrop : (!quizzesBackdrop.hidden ? quizzesBackdrop : null);
+    if (!openBackdrop) return;
+
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (openBackdrop !== backdrop) { closeQuizzes(); return; }
+
       // First Escape puts the focused field back, as it does in the table.
       // A second one, with nothing left to undo, closes the dialog.
       var field = focusedField();
@@ -812,13 +1133,14 @@
       }
       return;
     }
-    if (e.key !== 'Tab') return;
 
-    // Keep Tab inside the dialog while it is open.
-    var stops = [].slice.call(backdrop.querySelectorAll('input, button'));
+    // Keep Tab inside the dialog, and bring it back if a notification took it.
+    var stops = [].slice.call(openBackdrop.querySelectorAll('input, button'));
     if (!stops.length) return;
     var first = stops[0], last = stops[stops.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+
+    if (!openBackdrop.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
 
@@ -902,7 +1224,11 @@
     });
   });
 
+  // Write once on load so a board stored in an older shape is migrated on the
+  // spot, rather than staying v1 until something happens to change it.
+  save();
   render();
+  renderQuizList();
 })();
 </script>
 </body>

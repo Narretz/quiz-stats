@@ -14,8 +14,9 @@ function launch() {
   return chromium.launch(options);
 }
 
-// A board in a known state. `teams` is written straight to localStorage, so a
-// seed can include shapes the UI would not let you type.
+// A board in a known state. `teams` is written straight to localStorage as the
+// one stored quiz, so a seed can include shapes the UI would not let you type.
+// `raw` writes storage verbatim instead, for testing what older shapes load as.
 async function openBoard(browser, options) {
   options = options || {};
   const viewport = options.viewport || { width: 900, height: 800 };
@@ -29,10 +30,15 @@ async function openBoard(browser, options) {
   page.on('pageerror', e => page.errors.push(e.message));
 
   await page.goto(APP_URL);
-  await page.evaluate(
-    ([key, teams]) => teams ? localStorage.setItem(key, JSON.stringify(teams)) : localStorage.removeItem(key),
-    [STORAGE_KEY, options.teams || null]
-  );
+  await page.evaluate(([key, teams, raw]) => {
+    if (raw !== null) { localStorage.setItem(key, JSON.stringify(raw)); return; }
+    if (!teams) { localStorage.removeItem(key); return; }
+    localStorage.setItem(key, JSON.stringify({
+      version: 2,
+      quizzes: [{ id: 'seed-quiz', name: 'Test quiz', created: 1700000000000, teams: teams }],
+      currentId: 'seed-quiz',
+    }));
+  }, [STORAGE_KEY, options.teams || null, options.raw === undefined ? null : options.raw]);
   await page.reload();
   return page;
 }
@@ -56,10 +62,25 @@ async function press(page, target, touch) {
   await page.waitForTimeout(30);
 }
 
-const stored = page => page.evaluate(
-  key => JSON.parse(localStorage.getItem(key) || '[]').map(t => t.name + ':' + JSON.stringify(t.scores)),
-  STORAGE_KEY
-);
+// The teams of the quiz currently on screen.
+const stored = page => page.evaluate(key => {
+  const raw = JSON.parse(localStorage.getItem(key) || 'null');
+  if (!raw || !raw.quizzes) return [];
+  const quiz = raw.quizzes.filter(q => q.id === raw.currentId)[0] || raw.quizzes[0];
+  return (quiz ? quiz.teams : []).map(t => t.name + ':' + JSON.stringify(t.scores));
+}, STORAGE_KEY);
+
+// Every stored quiz, for the multi-quiz tests.
+const storedQuizzes = page => page.evaluate(key => {
+  const raw = JSON.parse(localStorage.getItem(key) || 'null');
+  if (!raw || !raw.quizzes) return { names: [], current: null, teamCounts: [] };
+  const current = raw.quizzes.filter(q => q.id === raw.currentId)[0];
+  return {
+    names: raw.quizzes.map(q => q.name),
+    current: current ? current.name : null,
+    teamCounts: raw.quizzes.map(q => q.teams.length),
+  };
+}, STORAGE_KEY);
 
 const notes = page => page.$$eval('.note .note-text', els => els.map(e => e.textContent));
 const clearNotes = page => page.$$eval('.note-close', els => els.forEach(e => e.click()));
@@ -78,4 +99,7 @@ const openCell = page => page.evaluate(() => {
 const places = page => page.$$eval('td.total', cells => cells.map(c =>
   c.querySelector('.rank').textContent.trim() + c.querySelector('.rank-indicator').textContent.trim()));
 
-module.exports = { APP_URL, STORAGE_KEY, launch, openBoard, press, stored, notes, clearNotes, openCell, places };
+module.exports = {
+  APP_URL, STORAGE_KEY, launch, openBoard, press,
+  stored, storedQuizzes, notes, clearNotes, openCell, places,
+};
