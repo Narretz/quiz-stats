@@ -64,6 +64,9 @@
   }
   button:hover { border-color: var(--muted); }
 
+  .toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .toolbar button { padding: 6px 12px; min-height: 36px; font-size: 13px; }
+
   .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
   th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: right; }
@@ -241,7 +244,11 @@
     </table>
   </div>
 
-  <p id="hint">Tap a round cell to enter points (0&ndash;10, halves allowed) &mdash; Enter moves to the next one. Tap a team name to rename it, a column header to sort, or Edit to change a whole team at once.</p>
+  <p id="hint">Tap a round cell to enter points. Enter moves to the next one.</p>
+
+  <div class="toolbar">
+    <button type="button" id="copy-csv">Copy as CSV</button>
+  </div>
 </main>
 
 <div id="notifications" class="notifications" role="status" aria-live="polite"></div>
@@ -450,6 +457,77 @@
     editing = step ? nextCell(target, step) : null;
     render();
   }
+
+  // CSV ---------------------------------------------------------------------
+  // RFC 4180: quote anything holding a comma, quote or newline, and double
+  // the quotes inside it.
+  function csvCell(value) {
+    var text = value == null ? '' : String(value);
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  }
+
+  // The board as it is on screen, in the order it is sorted. The add-order
+  // number and the place are left out: both are derivable, and a spreadsheet
+  // can rank the totals itself.
+  function boardAsCsv() {
+    var header = ['Team'];
+    for (var i = 0; i < ROUNDS; i++) header.push('R' + (i + 1));
+    header.push('Total');
+
+    var lines = [header.join(',')];
+    rows().forEach(function (t) {
+      var cells = [t.name]
+        .concat(t.scores.map(function (score) { return score == null ? '' : score; }))
+        .concat([t.total]);
+      lines.push(cells.map(csvCell).join(','));
+    });
+    return lines.join('\r\n');
+  }
+
+  // execCommand is deprecated but it is the only thing that works when the
+  // page is opened from a file:// URL, where the clipboard API is missing.
+  function copyViaTextarea(text) {
+    var area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.top = '-1000px';
+    document.body.appendChild(area);
+    area.select();
+
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+    document.body.removeChild(area);
+    return copied;
+  }
+
+  function copiedMessage() {
+    return 'Copied ' + teams.length + (teams.length === 1 ? ' team' : ' teams') + ' as CSV.';
+  }
+
+  function copyFailed() {
+    notify('Could not reach the clipboard. Your browser may be blocking it.',
+           { tone: 'warn', timeout: 8000 });
+  }
+
+  document.getElementById('copy-csv').addEventListener('click', function () {
+    if (!teams.length) {
+      notify('There is nothing to copy yet.', { tone: 'warn' });
+      return;
+    }
+
+    var csv = boardAsCsv();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(csv).then(
+        function () { notify(copiedMessage()); },
+        function () { if (copyViaTextarea(csv)) notify(copiedMessage()); else copyFailed(); }
+      );
+    } else if (copyViaTextarea(csv)) {
+      notify(copiedMessage());
+    } else {
+      copyFailed();
+    }
+  });
 
   // Notifications ----------------------------------------------------------
   // notify(message, { action: { label, onClick }, tone: 'warn', timeout: ms })
