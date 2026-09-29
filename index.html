@@ -833,8 +833,10 @@
       return t.name.toLowerCase() === name.toLowerCase();
     });
     if (clash) {
-      notify('There is already a team called "' + name + '". Both are on the board now.',
+      notify('There is already a team called "' + name + '". Pick a different name.',
              { tone: 'warn', timeout: 8000 });
+      field.select();          // the name stays put so it can be edited
+      return;
     }
 
     teams.push({
