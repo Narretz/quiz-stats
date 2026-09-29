@@ -1,0 +1,12 @@
+{
+  "name": "quiz-scoreboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Client-side quiz scoreboard: 5 rounds, automatic totals and places.",
+  "scripts": {
+    "test": "node tests/run.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

@@ -31,12 +31,25 @@ jobs:
           # Turns Pages on for the repo if it is not enabled yet.
           enablement: true
 
-      # The site is plain static files, so the repo root is the artifact.
-      # .git and .github are excluded by the action.
+      # Publish the site only: the tests and anything a dev install leaves
+      # behind stay out of the artifact.
+      - name: Stage the site
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude '_site' \
+            --exclude 'tests' \
+            --exclude 'node_modules' \
+            --exclude 'package.json' \
+            --exclude 'package-lock.json' \
+            --exclude '.git' \
+            --exclude '.github' \
+            ./ _site/
+
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy
         id: deployment
