@@ -251,8 +251,7 @@
       <div class="modal-actions">
         <button type="button" id="edit-delete" class="danger">Delete team</button>
         <span class="spacer"></span>
-        <button type="button" id="edit-discard">Discard</button>
-        <button type="submit" id="edit-save" class="primary">Save</button>
+        <button type="submit" id="edit-done" class="primary">Done</button>
       </div>
     </form>
   </div>
@@ -275,6 +274,7 @@
   var modalTitle = document.getElementById('modal-title');
   var nameField = document.getElementById('edit-name');
   var modalTeamId = null;
+  var modalSnapshot = null;
   var returnFocusTo = null;
 
   function load() {
@@ -564,6 +564,52 @@
     }
   })();
 
+  // What the field should be showing, straight from the team.
+  function storedValue(index) {
+    var team = byId(modalTeamId);
+    if (!team) return '';
+    if (index === 'name') return team.name;
+    return team.scores[index] == null ? '' : String(team.scores[index]);
+  }
+
+  function focusedField() {
+    if (document.activeElement === nameField) return { input: nameField, index: 'name' };
+    var i = roundFields.indexOf(document.activeElement);
+    return i >= 0 ? { input: roundFields[i], index: i } : null;
+  }
+
+  // Write one field into the team, then echo back what was actually stored:
+  // 99 becomes 10 and a blank name springs back, so the field never disagrees
+  // with the board behind it.
+  function writeModalField(input, index) {
+    var team = byId(modalTeamId);
+    if (!team) return;
+
+    if (index === 'name') {
+      var name = input.value.trim();
+      if (name) team.name = name;
+      modalTitle.textContent = 'Edit ' + team.name;
+    } else {
+      team.scores[index] = parseScore(input.value);
+    }
+    input.value = storedValue(index);
+  }
+
+  function commitModalField(input, index) {
+    writeModalField(input, index);
+    save();
+    render();
+  }
+
+  // Catches whichever field still has focus when the dialog closes.
+  function flushModalFields() {
+    if (!modalTeamId) return;
+    writeModalField(nameField, 'name');
+    roundFields.forEach(function (input, i) { writeModalField(input, i); });
+    save();
+    render();
+  }
+
   function openModal(id) {
     var team = byId(id);
     if (!team) return;
@@ -577,6 +623,7 @@
     }
 
     modalTeamId = id;
+    modalSnapshot = { name: team.name, scores: team.scores.slice() };
     returnFocusTo = document.activeElement;
     modalTitle.textContent = 'Edit ' + team.name;
     nameField.value = team.name;
@@ -589,10 +636,23 @@
     nameField.select();
   }
 
-  function closeModal() {
+  // silent skips the undo notification, for the delete path which posts
+  // its own.
+  function closeModal(silent) {
     var id = modalTeamId;
+    var before = modalSnapshot;
+
+    flushModalFields();
+
+    var team = byId(id);
+    var changed = !silent && team && before && (
+      team.name !== before.name ||
+      JSON.stringify(team.scores) !== JSON.stringify(before.scores)
+    );
+
     backdrop.hidden = true;
     modalTeamId = null;
+    modalSnapshot = null;
 
     // Prefer this row's current Edit button: a re-render may have replaced the
     // element that opened the dialog.
@@ -600,39 +660,58 @@
     if (button) button.focus();
     else if (returnFocusTo && document.contains(returnFocusTo)) returnFocusTo.focus();
     returnFocusTo = null;
-  }
 
-  function saveModal() {
-    var team = byId(modalTeamId);
-    if (team) {
-      var name = nameField.value.trim();
-      if (name) team.name = name;
-      roundFields.forEach(function (input, i) {
-        team.scores[i] = parseScore(input.value);
+    // Nothing here asked permission, so everything here can be taken back.
+    if (changed) {
+      notify('Updated "' + team.name + '".', {
+        timeout: 12000,
+        action: {
+          label: 'Undo',
+          onClick: function () {
+            var current = byId(id);
+            if (!current) return;
+            current.name = before.name;
+            current.scores = before.scores.slice();
+            save();
+            render();
+          }
+        }
       });
-      save();
     }
-    closeModal();
-    render();
   }
 
   document.getElementById('edit-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    saveModal();
+    closeModal();
   });
-  document.getElementById('edit-discard').addEventListener('click', closeModal);
   document.getElementById('edit-delete').addEventListener('click', function () {
     var id = modalTeamId;
-    closeModal();
+    closeModal(true);
     deleteTeam(id);
   });
 
+  nameField.addEventListener('blur', function () { commitModalField(nameField, 'name'); });
+  roundFields.forEach(function (input, i) {
+    input.addEventListener('blur', function () { commitModalField(input, i); });
+  });
+
   backdrop.addEventListener('click', function (e) {
-    if (e.target === backdrop) closeModal();
+    if (e.target === backdrop) closeModal();   // not closeModal(event)
   });
 
   backdrop.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      // First Escape puts the focused field back, as it does in the table.
+      // A second one, with nothing left to undo, closes the dialog.
+      var field = focusedField();
+      if (field && field.input.value !== storedValue(field.index)) {
+        field.input.value = storedValue(field.index);
+      } else {
+        closeModal();
+      }
+      return;
+    }
     if (e.key !== 'Tab') return;
 
     // Keep Tab inside the dialog while it is open.
