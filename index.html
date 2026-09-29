@@ -45,8 +45,15 @@
   }
   main { max-width: 860px; margin: 0 auto; }
   h1 { font-size: 20px; margin: 0 0 2px; }
+
+  /* Title left, quiz actions top right. On a narrow screen the actions wrap
+     to their own line and stay right-aligned rather than squashing the title. */
+  .page-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .page-title { flex: 1 1 12em; min-width: 0; }
+  .page-actions { display: flex; gap: 8px; flex: none; margin-left: auto; }
+  .page-actions button { padding: 6px 12px; min-height: 36px; font-size: 13px; }
   .quiz-label {
-    margin: 0 0 16px; font-weight: 600; color: var(--muted);
+    margin: 0; font-weight: 600; color: var(--muted);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
@@ -241,8 +248,16 @@
 </head>
 <body>
 <main>
-  <h1>Quiz Scoreboard</h1>
-  <p id="quiz-label" class="quiz-label"></p>
+  <div class="page-head">
+    <div class="page-title">
+      <h1>Quiz Scoreboard</h1>
+      <p id="quiz-label" class="quiz-label"></p>
+    </div>
+    <div class="page-actions">
+      <button type="button" id="new-quiz">New quiz</button>
+      <button type="button" id="show-quizzes">Quizzes</button>
+    </div>
+  </div>
 
   <form id="add-form">
     <input id="team-name" placeholder="Team name" autocomplete="off" maxlength="40">
@@ -271,8 +286,6 @@
   <p id="hint">Tap a round cell to enter points. Enter moves to the next one.</p>
 
   <div class="toolbar">
-    <button type="button" id="new-quiz">New quiz</button>
-    <button type="button" id="show-quizzes">Quizzes</button>
     <button type="button" id="copy-csv">Copy as CSV</button>
   </div>
 </main>
