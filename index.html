@@ -26,7 +26,7 @@
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 20px 16px 40px;
+    padding: 20px 12px 40px;
     background: var(--bg);
     color: var(--ink);
     font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -102,17 +102,16 @@
     th, td { padding: 4px 4px; }
     /* ~44px rows so a score cell is a comfortable tap target. */
     td.score { width: 40px; height: 44px; padding: 0; text-align: center; }
-    /* Place + team stay pinned while the rounds scroll sideways. */
+    /* No columns are pinned: the whole table fits from ~320px up with typical
+       scores (~330px if every round is a 10), so there is no hand-kept offset
+       to match a rendered width. Narrower than that, .wrap scrolls sideways. */
     th:first-child, td.seq {
-      position: sticky; left: 0; z-index: 1; background: var(--bg);
-      width: 26px; padding-left: 2px; padding-right: 4px;
+      /* width on a table cell cannot beat min-content, so shrink the content. */
+      font-size: 12px; padding-left: 2px; padding-right: 2px;
     }
     th:nth-child(2), td.name {
-      position: sticky; left: 26px; z-index: 1; background: var(--bg);
-      box-shadow: 1px 0 0 var(--line);
       max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    thead th:first-child, thead th:nth-child(2) { z-index: 3; }
     td.name input { max-width: 100%; }
     .rp, .pl-full { display: none; }
     .pl-short { display: inline; }
