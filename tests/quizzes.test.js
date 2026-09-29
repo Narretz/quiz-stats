@@ -55,7 +55,7 @@ module.exports = async function ({ browser, ok }) {
   ok(rows.length === 2, 'both quizzes are listed');
   ok(rows.filter(r => r.current).length === 1 && rows.find(r => r.current).name === 'Week 2',
      'the quiz on screen is marked');
-  ok(rows.find(r => r.current).meta.includes('showing now'), 'and says so: ' + rows.find(r => r.current).meta);
+  ok(rows.find(r => r.current).meta.includes('active'), 'and says so: ' + rows.find(r => r.current).meta);
   ok(rows.find(r => !r.current).acts.join(',') === 'open,reuse,delete', 'the others offer open, reuse and delete');
   ok(rows.find(r => r.current).acts.indexOf('open') < 0, 'the current quiz has no Open button');
 

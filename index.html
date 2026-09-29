@@ -51,7 +51,6 @@
   .page-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
   .page-title { flex: 1 1 12em; min-width: 0; }
   .page-actions { display: flex; gap: 8px; flex: none; margin-left: auto; }
-  .page-actions button { padding: 6px 12px; min-height: 36px; font-size: 13px; }
   .quiz-label {
     margin: 0; font-weight: 600; color: var(--muted);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -74,9 +73,11 @@
     background: var(--hover); color: var(--ink); cursor: pointer;
   }
   button:hover { border-color: var(--muted); }
+  /* Secondary actions - page header, toolbar, dialog headers, quiz rows - are
+     all this size. The primary controls (Add team, Close) keep 44px. */
+  .btn-sm { padding: 6px 12px; min-height: 36px; font-size: 13px; }
 
   .toolbar { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-  .toolbar button { padding: 6px 12px; min-height: 36px; font-size: 13px; }
 
   .quiz-list { display: flex; flex-direction: column; gap: 10px; }
   .quiz-row {
@@ -91,9 +92,8 @@
   }
   .quiz-row-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .quiz-row-meta { flex: 1 1 auto; font-size: 12px; color: var(--muted); }
-  .quiz-row-actions { display: flex; gap: 6px; }
-  .quiz-row-actions button { padding: 4px 8px; min-height: 32px; font-size: 12px; }
-  #quizzes-new { flex: none; padding: 6px 12px; min-height: 36px; font-size: 13px; }
+  .quiz-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  #quizzes-new { flex: none; }
 
   .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
@@ -254,8 +254,8 @@
       <p id="quiz-label" class="quiz-label"></p>
     </div>
     <div class="page-actions">
-      <button type="button" id="new-quiz">New quiz</button>
-      <button type="button" id="show-quizzes">Quizzes</button>
+      <button type="button" id="new-quiz" class="btn-sm">New quiz</button>
+      <button type="button" id="show-quizzes" class="btn-sm">Quizzes</button>
     </div>
   </div>
 
@@ -286,7 +286,7 @@
   <p id="hint">Tap a round cell to enter points. Enter moves to the next one.</p>
 
   <div class="toolbar">
-    <button type="button" id="copy-csv">Copy as CSV</button>
+    <button type="button" id="copy-csv" class="btn-sm">Copy as CSV</button>
   </div>
 </main>
 
@@ -296,7 +296,7 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="quizzes-title" tabindex="-1">
     <div class="modal-head">
       <h2 id="quizzes-title">Stored quizzes</h2>
-      <button type="button" id="quizzes-new">New quiz</button>
+      <button type="button" id="quizzes-new" class="btn-sm">New quiz</button>
     </div>
     <div id="quiz-list" class="quiz-list"></div>
     <div class="modal-actions">
@@ -309,7 +309,7 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
     <div class="modal-head">
       <h2 id="modal-title">Edit team</h2>
-      <button type="button" id="edit-delete" class="danger">Delete team</button>
+      <button type="button" id="edit-delete" class="btn-sm danger">Delete team</button>
     </div>
     <!-- novalidate: out-of-range values are clamped by parseScore, the same way
          the inline editor treats them, instead of blocking the save. -->
@@ -319,7 +319,7 @@
       </label>
       <div id="edit-rounds"></div>
       <div class="modal-actions">
-        <button type="submit" id="edit-done" class="primary">Done</button>
+        <button type="submit" id="edit-done" class="primary">Close</button>
       </div>
     </form>
   </div>
@@ -802,11 +802,11 @@
         '<input class="quiz-row-name" type="text" maxlength="60" aria-label="Quiz name" value="' + esc(q.name) + '">' +
         '<div class="quiz-row-foot">' +
           '<span class="quiz-row-meta">' + teamCount(q) + ' &middot; ' + esc(formatDate(q.created)) +
-            (showing ? ' &middot; showing now' : '') + '</span>' +
+            (showing ? ' &middot; active' : '') + '</span>' +
           '<span class="quiz-row-actions">' +
-            (showing ? '' : '<button type="button" data-act="open">Open</button>') +
-            '<button type="button" data-act="reuse">Reuse teams</button>' +
-            '<button type="button" data-act="delete" class="danger">Delete</button>' +
+            (showing ? '' : '<button type="button" class="btn-sm" data-act="open">Open</button>') +
+            '<button type="button" class="btn-sm" data-act="reuse">Reuse teams in new quiz</button>' +
+            '<button type="button" class="btn-sm danger" data-act="delete">Delete</button>' +
           '</span>' +
         '</div>' +
       '</div>';
